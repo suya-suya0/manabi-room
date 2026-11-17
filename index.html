@@ -20,7 +20,16 @@
 })();
 </script>
 <script type="module">
-import {db,$,esc,time,flash,authView,login,logout,errorText} from './manabi-shared.js';
+try {
+  // 構文エラーを握りつぶさず、設定ファイルの検証結果を表示する。
+  const config = await import('./manabi-config.js?v=8');
+  if (!/^https:\/\/[^/]+\.supabase\.co\/?$/.test(config.SUPABASE_URL || '')) {
+    throw new Error('Project URLが正しくありません。末尾の /rest/v1/ は削除してください。');
+  }
+  if (!config.SUPABASE_PUBLISHABLE_KEY || !/^(sb_publishable_|eyJ)/.test(config.SUPABASE_PUBLISHABLE_KEY)) {
+    throw new Error('Publishable keyが未入力か、形式が正しくありません。');
+  }
+  const {db,$,esc,time,flash,authView,login,logout,errorText} = await import('./manabi-shared.js?v=8');
 const grades=['小4','小5','小6','中1','中2','中3'];let students=[],study=[],requests=[],links=[],messages=[],section='home',activeStudent=null,theme=localStorage.getItem('manabi_dark')==='yes',exitPop=localStorage.getItem('manabi_exitpop')!=='no',notify=localStorage.getItem('manabi_notify')!=='no';
 document.body.classList.toggle('dark',theme);
 function err(e){flash(errorText(e),'error')}
@@ -41,4 +50,13 @@ function settingsPage(){layout(`<h2>設定</h2>${[['dark','シンプルダーク
 function render(){({home,students:manage,study:studyPage,contact,requests:approve,settings:settingsPage}[section]||home)()}
 async function refresh(){try{await load();render();flash('最新の情報に更新しました','ok')}catch(e){err(e)}}
 authView(start).then(u=>{if(!u&&db)formAuth()}).catch(e=>{err(e);$('app').innerHTML='<div class="card"><h2>ログイン画面の読み込みに失敗しました</h2><p>上のエラーメッセージを確認してください。</p><button onclick="location.reload()">再読み込み</button></div>'});setInterval(()=>{if(!document.hidden&&$('logout')&&!$('logout').classList.contains('hidden'))refresh()},60000);
+} catch (e) {
+  const el = document.getElementById('message');
+  const detail = e instanceof SyntaxError
+    ? `接続用JavaScriptに構文エラーがあります。特に manabi-config.js の引用符（'）の閉じ忘れを確認してください。`
+    : (e && e.message) || String(e);
+  el.textContent = '起動に失敗しました：' + detail;
+  el.style.cssText = 'color:#9b1c36;background:#fff0f3;padding:14px;border-radius:10px;white-space:pre-wrap';
+  document.getElementById('app').innerHTML = '<section class="card"><h2>起動できませんでした</h2><p>GitHubの <code>manabi-config.js</code> を確認してください。</p><p>URLは <code>https://xxxx.supabase.co</code> の形式にします。Publishable keyの前後には半角のシングルクォーテーションが必要です。</p></section>';
+}
 </script></body></html>
