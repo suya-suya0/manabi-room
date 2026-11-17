@@ -1,4 +1,25 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>まなび管理室｜管理者</title><link rel="stylesheet" href="./manabi-style.css"></head><body><div class="wrap"><header class="top"><div><div class="brand">✿ まなび管理室</div><div class="sub">先生用・管理画面</div></div><button id="logout" class="neutral hidden">ログアウト</button></header><div id="message" class="flash" role="status">接続準備中…</div><main id="app"></main></div><script type="module">
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>まなび管理室｜管理者</title><link rel="stylesheet" href="./manabi-style.css"></head><body><div class="wrap"><header class="top"><div><div class="brand">✿ まなび管理室</div><div class="sub">先生用・管理画面</div></div><button id="logout" class="neutral hidden">ログアウト</button></header><div id="message" class="flash" role="status">接続準備中…</div><main id="app"></main></div><script>
+// 初期化の失敗を「接続準備中…」のままにしないための診断表示
+(function(){
+ function show(message){
+  const el=document.getElementById('message');
+  if(!el)return;
+  if(el.textContent.includes('接続準備中')){
+   el.textContent='起動エラー：'+message+'（ページを再読み込みしても続く場合、この表示を教えてください）';
+   el.style.cssText='color:#9b1c36;background:#fff0f3;padding:14px;border-radius:10px;white-space:pre-wrap';
+  }
+ }
+ window.addEventListener('error',function(event){
+  show(event.message||'スクリプトの読み込みに失敗しました。manabi-shared.js / manabi-config.js を確認してください');
+ },true);
+ window.addEventListener('unhandledrejection',function(event){
+  const reason=event.reason;
+  show(reason&&reason.message?reason.message:String(reason||'通信または認証処理に失敗しました'));
+ });
+ setTimeout(function(){show('起動処理が完了しません。ブラウザの通信制限、外部ライブラリ、Supabaseへの接続を確認してください')},12000);
+})();
+</script>
+<script type="module">
 import {db,$,esc,time,flash,authView,login,logout,errorText} from './manabi-shared.js';
 const grades=['小4','小5','小6','中1','中2','中3'];let students=[],study=[],requests=[],links=[],messages=[],section='home',activeStudent=null,theme=localStorage.getItem('manabi_dark')==='yes',exitPop=localStorage.getItem('manabi_exitpop')!=='no',notify=localStorage.getItem('manabi_notify')!=='no';
 document.body.classList.toggle('dark',theme);
@@ -19,5 +40,5 @@ function approve(){layout(`<h2>保護者の登録申請</h2><p class="tiny">保�
 function settingsPage(){layout(`<h2>設定</h2>${[['dark','シンプルダークモード',theme],['exit','退室時に確認POPを表示',exitPop],['notify','未確認の連絡をメニューに表示',notify]].map(([id,t,v])=>`<div class="entry row"><b>${t}</b><label class="check"><input type="checkbox" id="${id}" ${v?'checked':''}> ON</label></div>`).join('')}<p class="tiny">この3つはこのブラウザに保存されます。</p>`);$('dark').onchange=e=>{theme=e.target.checked;localStorage.setItem('manabi_dark',theme?'yes':'no');document.body.classList.toggle('dark',theme)};$('exit').onchange=e=>{exitPop=e.target.checked;localStorage.setItem('manabi_exitpop',exitPop?'yes':'no')};$('notify').onchange=e=>{notify=e.target.checked;localStorage.setItem('manabi_notify',notify?'yes':'no');render()}}
 function render(){({home,students:manage,study:studyPage,contact,requests:approve,settings:settingsPage}[section]||home)()}
 async function refresh(){try{await load();render();flash('最新の情報に更新しました','ok')}catch(e){err(e)}}
-authView(start).then(u=>{if(!u&&db)formAuth()});setInterval(()=>{if(!document.hidden&&$('logout')&&!$('logout').classList.contains('hidden'))refresh()},60000);
+authView(start).then(u=>{if(!u&&db)formAuth()}).catch(e=>{err(e);$('app').innerHTML='<div class="card"><h2>ログイン画面の読み込みに失敗しました</h2><p>上のエラーメッセージを確認してください。</p><button onclick="location.reload()">再読み込み</button></div>'});setInterval(()=>{if(!document.hidden&&$('logout')&&!$('logout').classList.contains('hidden'))refresh()},60000);
 </script></body></html>
