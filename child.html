@@ -14,9 +14,33 @@ const day=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1)
 function notice(msg='',error=false){$('notice').innerHTML=msg?`<div class="${error?'err':'ok'}" role="status">${esc(msg)}</div>`:''}
 function back(){const b=$('goBack');if(b)b.onclick=()=>{tab='home';render()}}
 function signedOut(){user=null;$('home').classList.add('hidden');$('signout').classList.add('hidden');loginScreen()}
-function loginScreen(register=false){$('app').innerHTML=`<section class="card"><h2>${register?'子ども用の新規登録':'子ども用ログイン'}</h2><p class="note">保護者とは別のメールアドレス・パスワードでログインします。初めてのときは先生の承認が必要です。</p><div class="row"><button id="loginTab" class="${register?'':'pink'}">ログイン</button><button id="registerTab" class="${register?'pink':''}">新規登録</button></div><form id="authForm">${register?`<label>自分の本名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 太郎"><label>学年</label><select name="grade">${grades.map(g=>`<option>${g}</option>`).join('')}</select>`:''}<label>メールアドレス</label><input name="email" type="email" autocomplete="email" required><label>パスワード</label><input name="password" type="password" minlength="8" autocomplete="${register?'new-password':'current-password'}" required><button type="submit">${register?'新規登録して申請する':'ログイン'}</button></form>${!register?'<p><button id="forgot" class="pink">パスワードを忘れた方</button></p>':''}</section>`;
-$('loginTab').onclick=()=>loginScreen(false);$('registerTab').onclick=()=>loginScreen(true);if($('forgot'))$('forgot').onclick=forgotScreen;
-$('authForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),email=String(f.get('email')).trim(),password=String(f.get('password'));try{if(register){const name=String(f.get('name')).trim();if(!/[ 　]/.test(name))throw new Error('姓と名を入力してください');const {data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:new URL('./child.html',location.href).href,data:{subaru_child_name:name,subaru_child_grade:String(f.get('grade'))}}});if(error)throw error;sessionStorage.setItem('subaru-child-pending',JSON.stringify({name,grade:f.get('grade'),email}));if(data.session){user=data.user;await start()}else{loginScreen(false);notice('確認メールが届いたらリンクを開いてログインしてください。同じ端末で申請が完了します。')}}else{const {error}=await db.auth.signInWithPassword({email,password});if(error)throw error;await start()}}catch(ex){notice(ex.message,true)}}}
+function loginScreen(register=false){
+  const title=register?'子ども用の新規登録':'子ども用ログイン';
+  $('app').innerHTML=`<section class="card"><h2>${title}</h2><p class="note">保護者と子どもは別々のメールアドレス・パスワードでログインします。${register?'すでにほかのアプリで登録したメールアドレスは、新規登録ではなくログインを選んでください。':'初めて利用するときは、ログイン後に先生へ登録申請できます。'}</p><form id="authForm">${register?`<label>自分の本名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 太郎"><label>学年</label><select name="grade">${grades.map(g=>`<option>${g}</option>`).join('')}</select>`:''}<label>メールアドレス</label><input name="email" type="email" autocomplete="email" required><label>パスワード</label><input name="password" type="password" minlength="8" autocomplete="${register?'new-password':'current-password'}" required><div id="authFeedback" aria-live="polite"></div><button type="submit" id="authSubmit">${register?'登録する':'ログイン'}</button></form><div class="line"></div><p class="note">${register?'すでにアカウントがある方':'初めて登録する方'}</p><button id="switchAuth" class="pink">${register?'ログイン画面へ':'新規登録はこちら'}</button>${!register?'<p><button id="forgot" class="pink">パスワードを忘れた方</button></p>':''}</section>`;
+  const feedback=(msg,error=false)=>{const el=$('authFeedback');if(el)el.innerHTML=`<div class="${error?'err':'ok'}" role="status">${esc(msg)}</div>`;notice('')};
+  $('switchAuth').onclick=()=>{notice('');loginScreen(!register)};
+  if($('forgot'))$('forgot').onclick=forgotScreen;
+  $('authForm').onsubmit=async e=>{
+    e.preventDefault();const form=e.currentTarget,submit=$('authSubmit');const f=new FormData(form),email=String(f.get('email')).trim(),password=String(f.get('password'));
+    submit.disabled=true;submit.textContent=register?'登録中…':'確認中…';feedback('認証を確認しています…');
+    try{
+      if(register){
+        const name=String(f.get('name')).trim();if(!/\S+[ 　]+\S+/.test(name))throw new Error('姓と名を空白で区切って入力してください');
+        const {data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:new URL('./child.html',location.href).href,data:{subaru_child_name:name,subaru_child_grade:String(f.get('grade'))}}});
+        if(error)throw error;
+        if(data?.user?.identities?.length===0)throw new Error('このメールアドレスは登録済みの可能性があります。「ログイン画面へ」からお試しください。');
+        sessionStorage.setItem('subaru-child-pending',JSON.stringify({name,grade:f.get('grade'),email}));
+        if(data?.session){await start()}else{feedback('登録を受け付けました。確認メールが届かない場合は、メールの送信設定をご確認ください。アカウント登録と先生への申請は別の手続きです。')}
+      }else{
+        const {data,error}=await db.auth.signInWithPassword({email,password});
+        if(error)throw error;
+        if(!data?.session)throw new Error('ログイン情報を取得できませんでした。メール確認の状態をご確認ください。');
+        await start();
+      }
+    }catch(ex){feedback('操作できませんでした：'+(ex?.message||String(ex)),true)}
+    finally{const btn=$('authSubmit');if(btn){btn.disabled=false;btn.textContent=register?'登録する':'ログイン'}}
+  };
+}
 async function submitPending(){
   if(!user)return;
   // メール確認リンクを別ブラウザで開いても、登録時の氏名と学年を復元できる。
@@ -77,7 +101,7 @@ async function start(){
     $('signout').onclick=async()=>{await db.auth.signOut();signedOut();notice('ログアウトしました')};
     render();notice();
   }catch(e){
-    notice(e?.message||'読み込み中にエラーが発生しました',true);
+    notice('ログイン後の読み込みでエラー：'+(e?.message||'不明なエラー'),true);
     $('app').innerHTML='<section class="card"><h2>読み込みに失敗しました</h2><p class="note">通信状態を確認してください。ログイン情報がない場合はログイン画面に戻れます。</p><button id="retry">再確認する</button> <button id="goLogin" class="pink">ログイン画面へ</button></section>';
     $('retry').onclick=start;
     $('goLogin').onclick=()=>{signedOut();notice()};
