@@ -6,6 +6,7 @@ on:
     paths:
       - 'index_v*.html'
       - 'parent_v*.html'
+      - 'child_v*.html'
       - '.github/workflows/auto-latest.yml'
   workflow_dispatch:
 
@@ -24,15 +25,15 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-          for prefix, target in [('index', 'index.html'), ('parent', 'parent.html')]:
+          for prefix, target in [('index', 'index.html'), ('parent', 'parent.html'), ('child', 'child.html')]:
               versions = []
               for path in Path('.').glob(f'{prefix}_v*.html'):
                   match = re.fullmatch(rf'{prefix}_v([0-9]+)\.html', path.name)
                   if match:
                       versions.append((int(match.group(1)), path))
               if not versions:
-                  if prefix == 'parent':
-                      print('No parent version found; skipping parent.html')
+                  if prefix in ('parent','child'):
+                      print(f'No {prefix} version found; skipping {target}')
                       continue
                   raise SystemExit('No index_vN.html files found')
               number, latest = max(versions)
@@ -41,7 +42,7 @@ jobs:
           PY
       - name: Commit published HTML files if changed
         run: |
-          git add index.html parent.html
+          git add index.html parent.html child.html
           if git diff --cached --quiet; then
             echo 'Published pages already up to date'
             exit 0
