@@ -146,8 +146,12 @@ function loginPage(mode='login'){const register=mode==='register';$('logout').cl
 async function completePending(){try{const p=JSON.parse(sessionStorage.getItem('manabi_pending_request')||'null');if(!p||!user)return;const {data:{user:who}}=await db.auth.getUser();if(!who||who.email?.toLowerCase()!==p.email.toLowerCase())return;const {error}=await db.from('manabi_requests').insert({guardian_id:user.id,guardian_name:p.guardian,child_name:p.child,grade:p.grade});if(error)throw error;sessionStorage.removeItem('manabi_pending_request')}catch(e){err(e)}}
 async function load(){const rs=await Promise.all([db.from('manabi_links').select('*').eq('guardian_id',user.id),db.from('manabi_requests').select('*').eq('guardian_id',user.id).order('created_at',{ascending:false}),db.from('manabi_students').select('*'),db.from('manabi_messages').select('*').eq('guardian_id',user.id).order('created_at',{ascending:false}).limit(500),db.from('manabi_study').select('id,student_id,subject,pages,created_at').order('created_at',{ascending:false}).limit(500)]);for(const r of rs)if(r.error)throw r.error;[links,requests,students,messages,studyRecords]=rs.map(x=>x.data);students=students.filter(s=>links.some(l=>l.student_id===s.id));studyRecords=studyRecords.filter(r=>students.some(s=>s.id===r.student_id));
   // 進度テーブルは追加SQL適用後に有効になる。未適用でも他の画面は利用可能。
-  const progressResult=await db.from('manabi_school_progress').select('student_id,subject,details,updated_at').eq('guardian_id',user.id);
-  schoolProgress=progressResult.error?[]:(progressResult.data||[]).filter(r=>students.some(s=>s.id===r.student_id));
+  const ids=students.map(s=>s.id);
+  if(!ids.length){schoolProgress=[];return}
+  const progressResult=await db.from('manabi_school_progress').select('student_id,subject,details,updated_at').in('student_id',ids).order('updated_at',{ascending:false});
+  if(progressResult.error){schoolProgress=[];}else{
+    const seen=new Set();schoolProgress=(progressResult.data||[]).filter(r=>{const k=r.student_id+'|'+r.subject;if(seen.has(k))return false;seen.add(k);return true});
+  }
 }
 async function start(u){try{if(recoveryMode){if(!recoveryScreenVisible)resetPasswordView();return}user=u|| (await db.auth.getUser()).data.user;if(!user){loginPage();return}await completePending();await load();$('logout').classList.remove('hidden');$('headerContact').classList.remove('hidden');$('logout').onclick=async()=>{try{await logout()}catch(e){err(e)}};$('headerContact').onclick=()=>{page='contact';render()};flash('ログイン中です','ok');render()}catch(e){err(e)}}
 function nav(){return ''} // 下部固定メニューはv11で廃止
