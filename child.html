@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id), esc=x=>String(x??'').replace(/[&<>"']/g
 const subjects=['国語','数学','理科','社会','英語','その他'];
 const tasks=['スマホを置いて過ごす','紙の本を15分読む','空や風景をぼんやり眺める','何も聴かずに散歩する','手を使って何かをつくる','寝る前は画面を見ない'];
 const grades=['小4','小5','小6','中1','中2','中3'];
-let user=null,request=null,link=null,student=null,study=[],progress=[],diary=[],checks=[],tab='home',recovery=false;
+let user=null,request=null,link=null,student=null,study=[],progress=[],diary=[],checks=[],tab='home',recovery=false,checkingApproval=false;
 const day=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 function notice(msg='',error=false){$('notice').innerHTML=msg?`<div class="${error?'err':'ok'}" role="status">${esc(msg)}</div>`:''}
 function back(){const b=$('goBack');if(b)b.onclick=()=>{tab='home';render()}}
@@ -116,7 +116,29 @@ function diaryPage(){base(`<button class="back" id="goBack">← ホーム</butto
 function settingsPage(){base(`<button class="back" id="goBack">← ホーム</button><section class="card"><h2>設定</h2><p class="note">ログイン中：${esc(user.email)}</p><label class="check"><input type="checkbox" id="dark" ${document.body.classList.contains('dark')?'checked':''}><span>ダークモード</span></label><button class="pink" id="changePass">パスワードを変更する</button></section>`);$('dark').onchange=e=>{document.body.classList.toggle('dark',e.target.checked);localStorage.setItem('subaru-child-dark',e.target.checked?'1':'0')};$('changePass').onclick=()=>resetScreen(true)}
 function resetScreen(signedIn=false){base(`<section class="card"><h2>新しいパスワード</h2><form id="passwordForm"><label>新しいパスワード（8文字以上）</label><input type="password" id="pass1" minlength="8" required><label>もう一度入力</label><input type="password" id="pass2" minlength="8" required><button>変更する</button></form></section>`);$('passwordForm').onsubmit=async e=>{e.preventDefault();if($('pass1').value!==$('pass2').value){notice('パスワードが一致しません',true);return}const {error}=await db.auth.updateUser({password:$('pass1').value});if(error){notice(error.message,true);return}history.replaceState({},'',location.pathname);recovery=false;notice('パスワードを更新しました');tab='home';await start()}}
 function forgotScreen(){base(`<section class="card"><h2>パスワードを忘れた方</h2><form id="forgotForm"><label>登録したメールアドレス</label><input id="forgotEmail" type="email" required><button>再設定メールを送信</button></form><p><button class="back" id="backLogin">ログイン画面に戻る</button></p></section>`);$('backLogin').onclick=()=>loginScreen();$('forgotForm').onsubmit=async e=>{e.preventDefault();const {error}=await db.auth.resetPasswordForEmail($('forgotEmail').value.trim(),{redirectTo:new URL('./child.html',location.href).href});if(error)notice(error.message,true);else notice('再設定メールの送信を受け付けました')}}
-function render(){if(!user){loginScreen();return}if(!link){base(`<section class="card"><h2>先生の承認待ち</h2><p>子ども用の登録申請を先生が確認しています。</p>${request?`<p>申請：${esc(request.child_name)}（${esc(request.grade)}）</p><p>状態：${esc(request.state)}</p>`:'<p class="note">先生への登録申請がまだ送信されていません。</p>'}${!request?'<button class="pink" id="completeRequest">登録申請を送る</button>':''}<button id="reload">再確認する</button></section>`);$('reload').onclick=start;if($('completeRequest'))$('completeRequest').onclick=manualChildRequest;return}if(!student){base('<section class="card">生徒情報を確認できません。先生にご確認ください。</section>');return}({home,study:studyPage,progress:progressPage,brain:brainPage,diary:diaryPage,settings:settingsPage}[tab]||home)()}
+async function checkApproval(){
+  if(checkingApproval)return;
+  checkingApproval=true;
+  const button=$('reload');if(button){button.disabled=true;button.textContent='確認中…'}
+  notice('先生の承認状況を確認しています…');
+  try{
+    await load();
+    render();
+    if(link&&student){notice('承認を確認しました。子ども用ホームを表示しています。');return;}
+    if(link&&!student){notice('承認されたアカウントですが、生徒情報を読み取れません。先生にご確認ください。',true);return;}
+    if(request?.state==='承認'){
+      notice('申請は承認済みですが、生徒との紐づけが確認できません。先生側で承認の保存状況を確認してください。',true);
+    }else if(request?.state==='却下'){
+      notice('申請は却下されています。先生にご確認ください。',true);
+    }else if(request?.state==='申請中'){
+      notice('最新の状態を確認しました。まだ「申請中」です。先生側で生徒を選んで「承認」を押しているか確認してください。');
+    }else{
+      notice('申請データが見つかりません。登録申請を送信してください。',true);
+    }
+  }catch(e){notice('承認状況を確認できませんでした：'+(e?.message||String(e)),true)}
+  finally{checkingApproval=false;const b=$('reload');if(b){b.disabled=false;b.textContent='再確認する'}}
+}
+function render(){if(!user){loginScreen();return}if(!link){base(`<section class="card"><h2>先生の承認待ち</h2><p>子ども用の登録申請を先生が確認しています。</p>${request?`<p>申請：${esc(request.child_name)}（${esc(request.grade)}）</p><p>状態：${esc(request.state)}</p>`:'<p class="note">先生への登録申請がまだ送信されていません。</p>'}${!request?'<button class="pink" id="completeRequest">登録申請を送る</button>':''}<button id="reload" type="button">再確認する</button><p class="note">先生が承認した後、このボタンで最新の状態を確認できます。</p></section>`);$('reload').onclick=checkApproval;if($('completeRequest'))$('completeRequest').onclick=manualChildRequest;return}if(!student){base('<section class="card">生徒情報を確認できません。先生にご確認ください。</section>');return}({home,study:studyPage,progress:progressPage,brain:brainPage,diary:diaryPage,settings:settingsPage}[tab]||home)()}
 const dark=localStorage.getItem('subaru-child-dark')==='1';document.body.classList.toggle('dark',dark);
 db.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){recovery=true;setTimeout(()=>resetScreen(),0)}});
 start();
