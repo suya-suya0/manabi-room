@@ -59,20 +59,31 @@ async function submitPending(){
   sessionStorage.removeItem('subaru-child-pending');
 }
 async function manualChildRequest(){
-  base(`<section class="card"><h2>先生への登録申請</h2><p class="note">アカウントの登録はできていますが、先生への申請がまだ届いていません。お名前と学年を入力して送信してください。</p><form id="manualRequestForm"><label>自分の本名（姓・名）</label><input name="child_name" maxlength="100" required placeholder="例：田中 太郎"><label>学年</label><select name="grade">${grades.map(g=>`<option value="${g}">${g}</option>`).join('')}</select><button type="submit">先生に登録申請を送る</button></form></section>`);
+  const reapply=request?.state==='却下';
+  if(request?.state==='申請中'){render();notice('すでに申請中です。先生の承認をお待ちください。');return;}
+  const savedName=request?.child_name||user?.user_metadata?.subaru_child_name||'';
+  const savedGrade=request?.grade||user?.user_metadata?.subaru_child_grade||'小4';
+  base(`<section class="card"><h2>${reapply?'再承認の申請':'先生への登録申請'}</h2><p class="note">${reapply?'前回の申請は却下されています。名前と学年を確認し、もう一度先生へ申請できます。':'先生への申請がまだ届いていません。お名前と学年を入力して送信してください。'}</p><form id="manualRequestForm"><label>自分の本名（姓・名）</label><input name="child_name" maxlength="100" required placeholder="例：田中 太郎" value="${esc(savedName)}"><label>学年</label><select name="grade">${grades.map(g=>`<option value="${g}" ${g===savedGrade?'selected':''}>${g}</option>`).join('')}</select><button type="submit">${reapply?'再承認を申請する':'先生に登録申請を送る'}</button> <button type="button" class="pink" id="cancelRequest">戻る</button></form></section>`);
+  $('cancelRequest').onclick=()=>{notice('');render()};
   $('manualRequestForm').onsubmit=async e=>{
     e.preventDefault();const form=e.currentTarget,f=new FormData(form),name=String(f.get('child_name')||'').trim(),grade=String(f.get('grade')||'');
     if(!/\S+[ 　]+\S+/.test(name)){notice('姓名を空白で区切って入力してください',true);return}
-    const button=form.querySelector('button');button.disabled=true;
+    const button=form.querySelector('button[type="submit"]');button.disabled=true;button.textContent='送信中…';
     try{
-      const {error}=await db.from('manabi_child_requests').insert({child_user_id:user.id,child_name:name,grade});
+      // 二重送信を避けるため、直前に最新申請を再チェックする。以前の却下履歴は残す。
+      const latest=await db.from('manabi_child_requests').select('state').eq('child_user_id',user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(1);
+      if(latest.error)throw latest.error;
+      if(latest.data?.[0]?.state==='申請中')throw new Error('すでに申請中です。「再確認する」で状態を確認してください。');
+      if(latest.data?.[0]?.state==='承認')throw new Error('承認済みの申請があります。「再確認する」で状態を確認してください。');
+      const {data:created,error}=await db.from('manabi_child_requests').insert({child_user_id:user.id,child_name:name,grade,state:'申請中'}).select('id,state').single();
       if(error)throw error;
-      await db.auth.updateUser({data:{subaru_child_name:name,subaru_child_grade:grade}});
-      await load();render();notice('先生への登録申請を送信しました。承認をお待ちください。');
-    }catch(ex){notice('申請を送信できませんでした：'+(ex.message||ex),true)}finally{button.disabled=false}
+      if(!created)throw new Error('申請の保存を確認できませんでした。');
+      const metadataResult=await db.auth.updateUser({data:{subaru_child_name:name,subaru_child_grade:grade}});
+      await load();render();notice('再承認の申請を送信しました。先生の確認をお待ちください。'+(metadataResult.error?' 氏名の補助情報だけ更新できませんでした。':''));
+    }catch(ex){notice('申請を送信できませんでした：'+(ex.message||ex),true)}finally{button.disabled=false;button.textContent=reapply?'再承認を申請する':'先生に登録申請を送る'}
   };
 }
-async function load(){let r=await Promise.all([db.from('manabi_child_links').select('*').eq('child_user_id',user.id).maybeSingle(),db.from('manabi_child_requests').select('*').eq('child_user_id',user.id).order('created_at',{ascending:false}).limit(1)]);for(const x of r)if(x.error)throw x.error;link=r[0].data;request=r[1].data?.[0]||null;student=null;study=[];progress=[];diary=[];checks=[];if(!link)return;r=await Promise.all([db.from('manabi_students').select('id,name,grade,status,status_at').eq('id',link.student_id).maybeSingle(),db.from('manabi_study').select('subject,pages,created_at').eq('student_id',link.student_id).order('created_at',{ascending:false}).limit(50),db.from('manabi_diary').select('body,created_at').order('created_at',{ascending:false}).limit(30),db.from('manabi_child_checks').select('item_index,checked').eq('child_user_id',user.id).eq('check_date',day())]);for(const x of r)if(x.error)throw x.error;student=r[0].data;study=r[1].data||[];diary=r[2].data||[];checks=r[3].data||[];const p=await db.from('manabi_school_progress').select('subject,details').eq('student_id',link.student_id);if(!p.error)progress=p.data||[]}
+async function load(){let r=await Promise.all([db.from('manabi_child_links').select('*').eq('child_user_id',user.id).maybeSingle(),db.from('manabi_child_requests').select('*').eq('child_user_id',user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(1)]);for(const x of r)if(x.error)throw x.error;link=r[0].data;request=r[1].data?.[0]||null;student=null;study=[];progress=[];diary=[];checks=[];if(!link)return;r=await Promise.all([db.from('manabi_students').select('id,name,grade,status,status_at').eq('id',link.student_id).maybeSingle(),db.from('manabi_study').select('subject,pages,created_at').eq('student_id',link.student_id).order('created_at',{ascending:false}).limit(50),db.from('manabi_diary').select('body,created_at').order('created_at',{ascending:false}).limit(30),db.from('manabi_child_checks').select('item_index,checked').eq('child_user_id',user.id).eq('check_date',day())]);for(const x of r)if(x.error)throw x.error;student=r[0].data;study=r[1].data||[];diary=r[2].data||[];checks=r[3].data||[];const p=await db.from('manabi_school_progress').select('subject,details').eq('student_id',link.student_id);if(!p.error)progress=p.data||[]}
 async function start(){
   try{
     // 未ログインは異常ではない。まずセッションの有無を確認する。
@@ -129,7 +140,7 @@ async function checkApproval(){
     if(request?.state==='承認'){
       notice('申請は承認済みですが、生徒との紐づけが確認できません。先生側で承認の保存状況を確認してください。',true);
     }else if(request?.state==='却下'){
-      notice('申請は却下されています。先生にご確認ください。',true);
+      notice('前回の申請は却下されています。「再承認を申請する」からもう一度送れます。',true);
     }else if(request?.state==='申請中'){
       notice('最新の状態を確認しました。まだ「申請中」です。先生側で生徒を選んで「承認」を押しているか確認してください。');
     }else{
@@ -138,7 +149,7 @@ async function checkApproval(){
   }catch(e){notice('承認状況を確認できませんでした：'+(e?.message||String(e)),true)}
   finally{checkingApproval=false;const b=$('reload');if(b){b.disabled=false;b.textContent='再確認する'}}
 }
-function render(){if(!user){loginScreen();return}if(!link){base(`<section class="card"><h2>先生の承認待ち</h2><p>子ども用の登録申請を先生が確認しています。</p>${request?`<p>申請：${esc(request.child_name)}（${esc(request.grade)}）</p><p>状態：${esc(request.state)}</p>`:'<p class="note">先生への登録申請がまだ送信されていません。</p>'}${!request?'<button class="pink" id="completeRequest">登録申請を送る</button>':''}<button id="reload" type="button">再確認する</button><p class="note">先生が承認した後、このボタンで最新の状態を確認できます。</p></section>`);$('reload').onclick=checkApproval;if($('completeRequest'))$('completeRequest').onclick=manualChildRequest;return}if(!student){base('<section class="card">生徒情報を確認できません。先生にご確認ください。</section>');return}({home,study:studyPage,progress:progressPage,brain:brainPage,diary:diaryPage,settings:settingsPage}[tab]||home)()}
+function render(){if(!user){loginScreen();return}if(!link){base(`<section class="card"><h2>先生の承認待ち</h2><p>子ども用の登録申請を先生が確認しています。</p>${request?`<p>申請：${esc(request.child_name)}（${esc(request.grade)}）</p><p>状態：${esc(request.state)}</p>`:'<p class="note">先生への登録申請がまだ送信されていません。</p>'}${!request?'<button class="pink" id="completeRequest">登録申請を送る</button>':request.state==='却下'?'<p class="note">却下された申請は履歴として残ります。内容を確認し、新しい申請を送れます。</p><button class="pink" id="completeRequest">再承認を申請する</button>':''}<button id="reload" type="button">再確認する</button><p class="note">先生が承認した後、このボタンで最新の状態を確認できます。</p></section>`);$('reload').onclick=checkApproval;if($('completeRequest'))$('completeRequest').onclick=manualChildRequest;return}if(!student){base('<section class="card">生徒情報を確認できません。先生にご確認ください。</section>');return}({home,study:studyPage,progress:progressPage,brain:brainPage,diary:diaryPage,settings:settingsPage}[tab]||home)()}
 const dark=localStorage.getItem('subaru-child-dark')==='1';document.body.classList.toggle('dark',dark);
 db.auth.onAuthStateChange((event)=>{if(event==='PASSWORD_RECOVERY'){recovery=true;setTimeout(()=>resetScreen(),0)}});
 start();
