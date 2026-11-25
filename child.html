@@ -19,7 +19,40 @@ $('loginTab').onclick=()=>loginScreen(false);$('registerTab').onclick=()=>loginS
 $('authForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target),email=String(f.get('email')).trim(),password=String(f.get('password'));try{if(register){const name=String(f.get('name')).trim();if(!/[ 　]/.test(name))throw new Error('姓と名を入力してください');const {data,error}=await db.auth.signUp({email,password,options:{emailRedirectTo:new URL('./child.html',location.href).href}});if(error)throw error;sessionStorage.setItem('subaru-child-pending',JSON.stringify({name,grade:f.get('grade'),email}));if(data.session){user=data.user;await submitPending();await load();render()}else{loginScreen(false);notice('確認メールが届いたらリンクを開いてログインしてください。同じ端末で申請が完了します。')}}else{const {error}=await db.auth.signInWithPassword({email,password});if(error)throw error;await start()}}catch(ex){notice(ex.message,true)}}}
 async function submitPending(){const raw=sessionStorage.getItem('subaru-child-pending');if(!raw||!user)return;const p=JSON.parse(raw);if(p.email.toLowerCase()!==user.email?.toLowerCase())return;const {data:existing,error:queryError}=await db.from('manabi_child_requests').select('id').eq('child_user_id',user.id).limit(1);if(queryError)throw queryError;if(!existing.length){const {error}=await db.from('manabi_child_requests').insert({child_user_id:user.id,child_name:p.name,grade:p.grade});if(error)throw error}sessionStorage.removeItem('subaru-child-pending')}
 async function load(){let r=await Promise.all([db.from('manabi_child_links').select('*').eq('child_user_id',user.id).maybeSingle(),db.from('manabi_child_requests').select('*').eq('child_user_id',user.id).order('created_at',{ascending:false}).limit(1)]);for(const x of r)if(x.error)throw x.error;link=r[0].data;request=r[1].data?.[0]||null;student=null;study=[];progress=[];diary=[];checks=[];if(!link)return;r=await Promise.all([db.from('manabi_students').select('id,name,grade,status,status_at').eq('id',link.student_id).maybeSingle(),db.from('manabi_study').select('subject,pages,created_at').eq('student_id',link.student_id).order('created_at',{ascending:false}).limit(50),db.from('manabi_diary').select('body,created_at').order('created_at',{ascending:false}).limit(30),db.from('manabi_child_checks').select('item_index,checked').eq('child_user_id',user.id).eq('check_date',day())]);for(const x of r)if(x.error)throw x.error;student=r[0].data;study=r[1].data||[];diary=r[2].data||[];checks=r[3].data||[];const p=await db.from('manabi_school_progress').select('subject,details').eq('student_id',link.student_id);if(!p.error)progress=p.data||[]}
-async function start(){try{const {data:{user:u},error}=await db.auth.getUser();if(error)throw error;user=u;if(!user){signedOut();return}await submitPending();await load();$('signout').classList.remove('hidden');$('home').classList.remove('hidden');$('home').onclick=()=>{tab='home';render()};$('signout').onclick=async()=>{await db.auth.signOut();signedOut();notice('ログアウトしました')};render();notice()}catch(e){notice(e.message,true);$('app').innerHTML='<section class="card"><h2>読み込みに失敗しました</h2><button id="retry">再確認する</button></section>';$('retry').onclick=start}}
+async function start(){
+  try{
+    // 未ログインは異常ではない。まずセッションの有無を確認する。
+    const {data:sessionData,error:sessionError}=await db.auth.getSession();
+    if(sessionError){
+      if(/auth session missing|session missing/i.test(sessionError.message||'')){
+        signedOut();notice();return;
+      }
+      throw sessionError;
+    }
+    if(!sessionData?.session){signedOut();notice();return;}
+    const {data:userData,error:userError}=await db.auth.getUser();
+    if(userError){
+      if(/auth session missing|session missing|invalid refresh token|refresh token not found/i.test(userError.message||'')){
+        await db.auth.signOut({scope:'local'});
+        signedOut();notice('ログイン情報の有効期限が切れました。再度ログインしてください。');return;
+      }
+      throw userError;
+    }
+    user=userData?.user||null;
+    if(!user){signedOut();notice();return;}
+    await submitPending();
+    await load();
+    $('signout').classList.remove('hidden');$('home').classList.remove('hidden');
+    $('home').onclick=()=>{tab='home';render()};
+    $('signout').onclick=async()=>{await db.auth.signOut();signedOut();notice('ログアウトしました')};
+    render();notice();
+  }catch(e){
+    notice(e?.message||'読み込み中にエラーが発生しました',true);
+    $('app').innerHTML='<section class="card"><h2>読み込みに失敗しました</h2><p class="note">通信状態を確認してください。ログイン情報がない場合はログイン画面に戻れます。</p><button id="retry">再確認する</button> <button id="goLogin" class="pink">ログイン画面へ</button></section>';
+    $('retry').onclick=start;
+    $('goLogin').onclick=()=>{signedOut();notice()};
+  }
+}
 function base(html){$('app').innerHTML=html;back()}
 function home(){const status=student?.status||'未到着',dt=student?.status_at?new Date(student.status_at).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'—';base(`<section class="card"><div class="muted">あなたの在室状況</div><h2>${esc(student.name)}（${esc(student.grade)}）</h2><div class="row"><span class="pill status-${esc(status)}">${esc(status)}</span><span class="muted">更新：${esc(dt)}</span></div><div class="line"></div><h3>最近の学習記録</h3>${study.slice(0,4).map(x=>`<div class="row" style="padding:8px 0"><span>${esc(x.subject)}　${Number(x.pages)}ページ</span><small class="muted">${esc(new Date(x.created_at).toLocaleDateString('ja-JP'))}</small></div>`).join('')||'<p class="note">まだ学習記録はありません。</p>'}</section><div class="tiles"><button class="tile green" data-tab="study"><span class="ico">▤</span><span class="label">学習記録</span><span class="desc">取り組んだ科目とページ数</span></button><button class="tile pink" data-tab="progress"><span class="ico">▣</span><span class="label">学校の進度</span><span class="desc">学校で今どこまで進んでいるか</span></button><button class="tile yellow" data-tab="brain"><span class="ico">☘</span><span class="label">脳のすき間を<br>あける時間</span><span class="desc">少しだけ画面から離れる</span></button><button class="tile green" data-tab="diary"><span class="ico">✎</span><span class="label">先生の<br>ひとこと日記</span><span class="desc">先生からのメッセージ</span></button></div><div class="row"><button class="pink" data-tab="settings">設定</button><button id="reload">情報を更新</button></div>`);document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});$('reload').onclick=async()=>{await load();render();notice('最新情報に更新しました')}}
 function studyPage(){base(`<button class="back" id="goBack">← ホーム</button><section class="card"><h2>学習記録</h2>${study.map(x=>`<div class="row" style="padding:10px 0"><strong>${esc(x.subject)}　${Number(x.pages)}ページ</strong><small class="muted">${esc(new Date(x.created_at).toLocaleDateString('ja-JP'))}</small></div>`).join('')||'<p>まだ記録はありません。</p>'}</section>`)}
