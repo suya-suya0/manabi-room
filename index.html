@@ -1,4 +1,4 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>まなび管理室｜管理者 v13</title><link rel="stylesheet" href="./manabi-style.css"><style>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>まなび管理室｜管理者 v14</title><link rel="stylesheet" href="./manabi-style.css"><style>
 /* 今日の生徒追加：既存のD案デザインに合わせたモーダル */
 .manabi-add-backdrop{position:fixed;inset:0;background:rgba(31,27,34,.52);display:flex;align-items:center;justify-content:center;padding:18px;z-index:1000}
 .manabi-add-dialog{width:min(560px,100%);max-height:min(84vh,760px);overflow:auto;background:var(--card,#fff);background-color:#fff;color:#422f3b;border:1px solid #efd5df;border-radius:20px;box-shadow:0 18px 55px rgba(37,17,30,.22);padding:24px}
@@ -30,7 +30,7 @@ body.dark .manabi-add-meta,body.dark .manabi-add-empty{color:#c9b9c2}
 body.dark .manabi-edit-dialog{background:#24242b;color:#f5edf2;border-color:#52505a}
 @media(max-width:490px){.manabi-edit-dialog{padding:18px}}
 
-/* v13 生徒管理：学年別の登録済み生徒一覧 */
+/* v14 生徒管理：折りたたみ対応 */
 .manabi-register-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 14px}
 .manabi-register-heading h3{margin:0}.manabi-register-heading h3 small{font-size:.8em;font-weight:500;opacity:.7}
 .manabi-register-heading label{font-size:.9rem}.manabi-register-heading input{width:min(260px,100%);margin:0}
@@ -44,6 +44,40 @@ body.dark .manabi-edit-dialog{background:#24242b;color:#f5edf2;border-color:#525
 body.dark .manabi-grade-group{background:#2e2930;border-color:#5c4b55}
 body.dark .manabi-grade-group summary{background:#493742;color:#f8eaf1}
 @media(max-width:600px){.manabi-register-heading{align-items:stretch;flex-direction:column}.manabi-register-heading input{width:100%}}
+
+/* すばる共通パレット：保護者・子ども用と統一した低彩度の配色 */
+body:not(.dark){background:#fff9f9;color:#344c3c}
+body:not(.dark) .brand{color:#315f3c;white-space:nowrap}
+body:not(.dark) .sub,body:not(.dark) .tiny,body:not(.dark) .muted{color:#677769}
+body:not(.dark) .card,body:not(.dark) .side{background:#fff;border:1px solid #efe6e6;box-shadow:0 6px 24px rgba(72,89,64,.045);border-radius:23px}
+body:not(.dark) .menu{gap:10px}
+body:not(.dark) .menu button{border:1px solid transparent;border-radius:14px;color:#31563b;background:#e1efcd;padding:14px 15px;transition:filter .15s,background .15s}
+body:not(.dark) .menu button:nth-child(3n + 2){background:#f5dce7}
+body:not(.dark) .menu button:nth-child(3n){background:#fff0c4}
+body:not(.dark) .menu button.active{border-color:#679177;box-shadow:inset 3px 0 0 #4e795a;font-weight:800;filter:saturate(1.08)}
+body:not(.dark) button:not(.secondary):not(.neutral):not(.danger):not(.manabi-add-grade):not(.manabi-add-person){background:#477655;color:#fff}
+body:not(.dark) button.secondary{background:#f5dce7;color:#6c4657}
+body:not(.dark) button.neutral{background:#e1efcd;color:#31563b}
+body:not(.dark) .stat{background:#e1efcd;color:#31563b;border-radius:18px}
+body:not(.dark) .stat:nth-child(2){background:#fff0c4}
+body:not(.dark) .stat:nth-child(3){background:#f5dce7}
+body:not(.dark) .flash{background:#f5dce7;color:#495f4d}
+body:not(.dark) .flash.ok{background:#e6f3df;color:#285a37}
+body:not(.dark) .flash.error{background:#ffe8e8;color:#9d344a}
+body:not(.dark) input,body:not(.dark) select,body:not(.dark) textarea{border-color:#dfd9d9}
+body:not(.dark) .manabi-grade-group{background:#fff;border:1px solid #dce7d8;border-radius:18px}
+body:not(.dark) .manabi-grade-group:nth-child(3n+1) summary{background:#e1efcd;color:#31563b}
+body:not(.dark) .manabi-grade-group:nth-child(3n+2) summary{background:#f5dce7;color:#70485a}
+body:not(.dark) .manabi-grade-group:nth-child(3n) summary{background:#fff0c4;color:#675331}
+.manabi-grade-group summary{min-height:55px;gap:12px}
+.manabi-grade-group summary::after{content:'⌄';font-size:23px;line-height:1;transition:transform .15s;flex:none}
+.manabi-grade-group[open] summary::after{transform:rotate(180deg)}
+.manabi-grade-group summary:focus-visible{outline:3px solid #66906e;outline-offset:-3px}
+.manabi-collapse-actions{display:flex;gap:7px;flex-wrap:wrap}
+.manabi-collapse-actions button{padding:8px 11px;font-size:13px;min-height:36px}
+body.dark .manabi-grade-group summary::after{color:#f8eaf1}
+body.dark .manabi-grade-group{border-color:#5c4b55}
+@media(max-width:700px){.manabi-collapse-actions{order:3}.manabi-register-heading label{width:100%}}
 </style></head><body><div class="wrap"><header class="top"><div><div class="brand">✿ まなび管理室</div><div class="sub">先生用・管理画面</div></div><button id="logout" class="neutral hidden">ログアウト</button></header><div id="message" class="flash" role="status">接続準備中…</div><main id="app"></main></div><script>
 // 初期化の失敗を「接続準備中…」のままにしないための診断表示
 (function(){
@@ -157,11 +191,13 @@ function openStudentEdit(id){
 }
 function manage(){
  const registered=[...students].sort((a,b)=>grades.indexOf(a.grade)-grades.indexOf(b.grade)||manabiKanaCollator.compare(kanaSortKey(a),kanaSortKey(b))||manabiKanaCollator.compare(a.name,b.name));
+ let savedGroups={};
+ try{savedGroups=JSON.parse(localStorage.getItem('manabi_grade_open_v14')||'{}')}catch(_){}
  const groups=grades.map(g=>{
   const members=registered.filter(s=>s.grade===g);
-  return `<details class="manabi-grade-group" open data-grade-group="${g}"><summary><span>${g}</span><small>${members.length}人</small></summary><div class="manabi-grade-members">${members.map(s=>`<div class="entry row manabi-register-row" data-register-search="${esc([s.name,s.kana,s.grade].join(' ').normalize('NFKC').toLowerCase())}"><div class="manabi-register-name"><strong>${esc(s.name)}</strong><div class="tiny">${esc(s.kana||'ふりがな未登録')}</div></div><div class="inline"><button type="button" class="secondary" data-edit="${s.id}">編集</button><button type="button" class="danger" data-del="${s.id}">削除</button></div></div>`).join('')||'<p class="manabi-no-member">この学年はまだ登録がありません。</p>'}</div></details>`;
+  return `<details class="manabi-grade-group" ${savedGroups[g] ? 'open' : ''} data-grade-group="${g}"><summary><span>${g}</span><small>${members.length}人</small></summary><div class="manabi-grade-members">${members.map(s=>`<div class="entry row manabi-register-row" data-register-search="${esc([s.name,s.kana,s.grade].join(' ').normalize('NFKC').toLowerCase())}"><div class="manabi-register-name"><strong>${esc(s.name)}</strong><div class="tiny">${esc(s.kana||'ふりがな未登録')}</div></div><div class="inline"><button type="button" class="secondary" data-edit="${s.id}">編集</button><button type="button" class="danger" data-del="${s.id}">削除</button></div></div>`).join('')||'<p class="manabi-no-member">この学年はまだ登録がありません。</p>'}</div></details>`;
  }).join('');
- layout(`<h2>生徒管理</h2><p class="tiny">生徒を登録しても在室にはなりません。登塾したら「ホーム → ＋ 生徒追加」から選んでください。</p><form id="addStudent" class="stack"><div class="row"><div style="flex:2"><label>氏名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 花子"></div><div style="flex:2"><label>ふりがな</label><input name="kana" maxlength="100" placeholder="例：たなか はなこ"></div><div><label>学年</label><select name="grade">${gradeSelect()}</select></div></div><button type="submit">生徒として登録する</button></form><div class="divider"></div><div class="manabi-register-heading"><h3>登録済み生徒一覧 <small>（${students.length}人）</small></h3><label for="manabi-student-search">名前・ふりがなで検索</label><input id="manabi-student-search" type="search" placeholder="名前・ふりがなを入力" autocomplete="off"></div><div class="manabi-grade-list">${groups}</div><p class="tiny">学年を押すと一覧を開閉できます。生徒の編集・削除はここから行います。</p>`);
+ layout(`<h2>生徒管理</h2><p class="tiny">生徒を登録しても在室にはなりません。登塾したら「ホーム → ＋ 生徒追加」から選んでください。</p><form id="addStudent" class="stack"><div class="row"><div style="flex:2"><label>氏名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 花子"></div><div style="flex:2"><label>ふりがな</label><input name="kana" maxlength="100" placeholder="例：たなか はなこ"></div><div><label>学年</label><select name="grade">${gradeSelect()}</select></div></div><button type="submit">生徒として登録する</button></form><div class="divider"></div><div class="manabi-register-heading"><h3>登録済み生徒一覧 <small>（${students.length}人）</small></h3><div class="manabi-collapse-actions"><button type="button" class="secondary" id="manabi-open-all">すべて開く</button><button type="button" class="neutral" id="manabi-close-all">すべて閉じる</button></div><label for="manabi-student-search">名前・ふりがなで検索</label><input id="manabi-student-search" type="search" placeholder="名前・ふりがなを入力" autocomplete="off"></div><div class="manabi-grade-list">${groups}</div><p class="tiny">学年を押すと一覧を開閉できます。生徒の編集・削除はここから行います。</p>`);
  $('addStudent').onsubmit=async e=>{
   e.preventDefault();const f=new FormData(e.currentTarget);
   const name=String(f.get('name')||'').trim(),kana=String(f.get('kana')||'').trim(),grade=String(f.get('grade')||'');
@@ -174,6 +210,14 @@ function manage(){
    await refresh();flash(`${name}さんを生徒管理に登録しました。今日の在室一覧には追加していません。`,'ok');
   }catch(ex){err(ex);submit.disabled=false;submit.textContent='生徒として登録する'}
  };
+ const groupEls=[...document.querySelectorAll('.manabi-grade-group')];
+ function saveGroupState(){
+   const state=Object.fromEntries(groupEls.map(el=>[el.dataset.gradeGroup,el.open]));
+   localStorage.setItem('manabi_grade_open_v14',JSON.stringify(state));
+ }
+ groupEls.forEach(el=>el.addEventListener('toggle',()=>{if(!$('manabi-student-search').value.trim())saveGroupState()}));
+ $('manabi-open-all').onclick=()=>{groupEls.forEach(el=>el.open=true);saveGroupState()};
+ $('manabi-close-all').onclick=()=>{groupEls.forEach(el=>el.open=false);saveGroupState()};
  $('manabi-student-search').oninput=e=>{
   const q=e.target.value.normalize('NFKC').toLowerCase().replace(/[\s　]/g,'');
   document.querySelectorAll('.manabi-grade-group').forEach(group=>{
@@ -184,6 +228,7 @@ function manage(){
    });
    group.classList.toggle('hidden',!!q&&!shown);
    if(q&&shown)group.open=true;
+   if(!q){const saved=JSON.parse(localStorage.getItem('manabi_grade_open_v14')||'{}');group.open=!!saved[group.dataset.gradeGroup]}
   });
  };
  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openStudentEdit(b.dataset.edit));
