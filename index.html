@@ -1,4 +1,4 @@
-<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>まなび管理室｜管理者 v12</title><link rel="stylesheet" href="./manabi-style.css"><style>
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>まなび管理室｜管理者 v13</title><link rel="stylesheet" href="./manabi-style.css"><style>
 /* 今日の生徒追加：既存のD案デザインに合わせたモーダル */
 .manabi-add-backdrop{position:fixed;inset:0;background:rgba(31,27,34,.52);display:flex;align-items:center;justify-content:center;padding:18px;z-index:1000}
 .manabi-add-dialog{width:min(560px,100%);max-height:min(84vh,760px);overflow:auto;background:var(--card,#fff);background-color:#fff;color:#422f3b;border:1px solid #efd5df;border-radius:20px;box-shadow:0 18px 55px rgba(37,17,30,.22);padding:24px}
@@ -29,6 +29,21 @@ body.dark .manabi-add-meta,body.dark .manabi-add-empty{color:#c9b9c2}
 .manabi-edit-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:22px}
 body.dark .manabi-edit-dialog{background:#24242b;color:#f5edf2;border-color:#52505a}
 @media(max-width:490px){.manabi-edit-dialog{padding:18px}}
+
+/* v13 生徒管理：学年別の登録済み生徒一覧 */
+.manabi-register-heading{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 14px}
+.manabi-register-heading h3{margin:0}.manabi-register-heading h3 small{font-size:.8em;font-weight:500;opacity:.7}
+.manabi-register-heading label{font-size:.9rem}.manabi-register-heading input{width:min(260px,100%);margin:0}
+.manabi-grade-list{display:grid;gap:12px}
+.manabi-grade-group{border:1px solid #edd4df;border-radius:15px;overflow:hidden;background:rgba(255,255,255,.65)}
+.manabi-grade-group summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:#f8e6ed;font-weight:700;color:#75445c;list-style:none}
+.manabi-grade-group summary::-webkit-details-marker{display:none}
+.manabi-grade-group summary small{font-size:.87rem;font-weight:500}
+.manabi-grade-members{padding:8px 12px}.manabi-grade-members .entry{margin:6px 0}
+.manabi-register-name{min-width:130px}.manabi-no-member{padding:4px 8px;color:#8d7780;font-size:.9rem}
+body.dark .manabi-grade-group{background:#2e2930;border-color:#5c4b55}
+body.dark .manabi-grade-group summary{background:#493742;color:#f8eaf1}
+@media(max-width:600px){.manabi-register-heading{align-items:stretch;flex-direction:column}.manabi-register-heading input{width:100%}}
 </style></head><body><div class="wrap"><header class="top"><div><div class="brand">✿ まなび管理室</div><div class="sub">先生用・管理画面</div></div><button id="logout" class="neutral hidden">ログアウト</button></header><div id="message" class="flash" role="status">接続準備中…</div><main id="app"></main></div><script>
 // 初期化の失敗を「接続準備中…」のままにしないための診断表示
 (function(){
@@ -72,7 +87,8 @@ function layout(inner){$('app').innerHTML=`<div class="grid"><aside class="side"
 // 今日の在室一覧は、その日に操作（追加・入室など）された生徒のみ表示する。
 // 退室済み・欠席は生徒マスターからは消さず、今日の一覧からだけ除外する。
 function isToday(iso){if(!iso)return false;const d=new Date(iso),n=new Date();return !Number.isNaN(d.getTime())&&d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate()}
-function todayVisible(){return students.filter(s=>isToday(s.status_at)&&s.status!=='退室済み'&&s.status!=='欠席')}
+// マスター登録直後の「未到着」は来塾扱いにしない。今日の在室一覧には入室・外出中の生徒だけを載せる。
+function todayVisible(){return students.filter(s=>isToday(s.status_at)&&(s.status==='在室中'||s.status==='外出中'))}
 // 全角カタカナをひらがなに統一し、ふりがなで50音順に並べる。
 function kanaSortKey(s){return (s.kana||s.name||'').normalize('NFKC').replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-96)).replace(/[\s　]+/g,'')}
 const manabiKanaCollator=new Intl.Collator('ja',{usage:'sort',sensitivity:'base',numeric:true});
@@ -139,7 +155,43 @@ function openStudentEdit(id){
  };
  overlay.querySelector('#manabi-edit-name').focus();
 }
-function manage(){layout(`<h2>生徒管理</h2><form id="addStudent" class="stack"><div class="row"><div style="flex:2"><label>氏名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 花子"></div><div style="flex:2"><label>ふりがな</label><input name="kana" maxlength="100"></div><div><label>学年</label><select name="grade">${gradeSelect()}</select></div></div><button type="submit">生徒を追加</button></form><div class="divider"></div>${students.map(s=>`<div class="entry row"><b>${esc(s.grade)}　${esc(s.name)}</b><button class="secondary" data-edit="${s.id}">編集</button><button class="danger" data-del="${s.id}">削除</button></div>`).join('')}`);$('addStudent').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const {error}=await db.from('manabi_students').insert({name:f.get('name').trim(),kana:f.get('kana').trim(),grade:f.get('grade')});if(error)throw error;await refresh()}catch(e){err(e)}};document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openStudentEdit(b.dataset.edit));document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('この生徒と学習記録・承認済みの紐づけを削除しますか？'))return;try{const {error}=await db.from('manabi_students').delete().eq('id',b.dataset.del);if(error)throw error;await refresh()}catch(e){err(e)}})}
+function manage(){
+ const registered=[...students].sort((a,b)=>grades.indexOf(a.grade)-grades.indexOf(b.grade)||manabiKanaCollator.compare(kanaSortKey(a),kanaSortKey(b))||manabiKanaCollator.compare(a.name,b.name));
+ const groups=grades.map(g=>{
+  const members=registered.filter(s=>s.grade===g);
+  return `<details class="manabi-grade-group" open data-grade-group="${g}"><summary><span>${g}</span><small>${members.length}人</small></summary><div class="manabi-grade-members">${members.map(s=>`<div class="entry row manabi-register-row" data-register-search="${esc([s.name,s.kana,s.grade].join(' ').normalize('NFKC').toLowerCase())}"><div class="manabi-register-name"><strong>${esc(s.name)}</strong><div class="tiny">${esc(s.kana||'ふりがな未登録')}</div></div><div class="inline"><button type="button" class="secondary" data-edit="${s.id}">編集</button><button type="button" class="danger" data-del="${s.id}">削除</button></div></div>`).join('')||'<p class="manabi-no-member">この学年はまだ登録がありません。</p>'}</div></details>`;
+ }).join('');
+ layout(`<h2>生徒管理</h2><p class="tiny">生徒を登録しても在室にはなりません。登塾したら「ホーム → ＋ 生徒追加」から選んでください。</p><form id="addStudent" class="stack"><div class="row"><div style="flex:2"><label>氏名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 花子"></div><div style="flex:2"><label>ふりがな</label><input name="kana" maxlength="100" placeholder="例：たなか はなこ"></div><div><label>学年</label><select name="grade">${gradeSelect()}</select></div></div><button type="submit">生徒として登録する</button></form><div class="divider"></div><div class="manabi-register-heading"><h3>登録済み生徒一覧 <small>（${students.length}人）</small></h3><label for="manabi-student-search">名前・ふりがなで検索</label><input id="manabi-student-search" type="search" placeholder="名前・ふりがなを入力" autocomplete="off"></div><div class="manabi-grade-list">${groups}</div><p class="tiny">学年を押すと一覧を開閉できます。生徒の編集・削除はここから行います。</p>`);
+ $('addStudent').onsubmit=async e=>{
+  e.preventDefault();const f=new FormData(e.currentTarget);
+  const name=String(f.get('name')||'').trim(),kana=String(f.get('kana')||'').trim(),grade=String(f.get('grade')||'');
+  if(!name||!grades.includes(grade)){alert('氏名と学年を確認してください。');return}
+  const submit=e.currentTarget.querySelector('button[type="submit"]');submit.disabled=true;submit.textContent='登録中…';
+  try{
+   // 新規生徒は未到着で登録するが、今日の在室一覧へは自動追加しない。
+   const {error}=await db.from('manabi_students').insert({name,kana,grade,status:'未到着'});
+   if(error)throw error;
+   await refresh();flash(`${name}さんを生徒管理に登録しました。今日の在室一覧には追加していません。`,'ok');
+  }catch(ex){err(ex);submit.disabled=false;submit.textContent='生徒として登録する'}
+ };
+ $('manabi-student-search').oninput=e=>{
+  const q=e.target.value.normalize('NFKC').toLowerCase().replace(/[\s　]/g,'');
+  document.querySelectorAll('.manabi-grade-group').forEach(group=>{
+   let shown=0;
+   group.querySelectorAll('.manabi-register-row').forEach(row=>{
+    const matching=row.dataset.registerSearch.replace(/[\s　]/g,'').includes(q);
+    row.classList.toggle('hidden',!matching);if(matching)shown++;
+   });
+   group.classList.toggle('hidden',!!q&&!shown);
+   if(q&&shown)group.open=true;
+  });
+ };
+ document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openStudentEdit(b.dataset.edit));
+ document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
+  if(!confirm('この生徒と学習記録・承認済みの紐づけを削除しますか？'))return;
+  try{const {error}=await db.from('manabi_students').delete().eq('id',b.dataset.del);if(error)throw error;await refresh()}catch(e){err(e)}
+ });
+}
 function studyPage(){const s=students.find(x=>x.id===activeStudent);layout(`<h2>学習記録</h2>${s?`<div class="card"><h3>${esc(s.grade)} ${esc(s.name)}</h3><form id="studyForm"><label>科目</label><div class="tabbar">${['国','数','理','社','英','その他'].map(t=>`<button type="button" data-subject="${t}" class="${t==='国'?'active':''}">${t}</button>`).join('')}</div><input id="otherSubject" placeholder="その他の内容" class="hidden" maxlength="50"><label>取り組んだページ数：<b id="pageno">10</b>ページ</label><input id="pages" type="range" min="0" max="100" value="10"><div class="row"><button type="submit">決定して記録</button><button type="button" class="secondary" id="back">一覧に戻る</button></div></form></div><h3 style="margin-top:18px">記録履歴</h3>${study.filter(r=>r.student_id===s.id).map(r=>`<div class="entry">${esc(r.subject)}　${r.pages}ページ　<span class="tiny">${time(r.created_at)}</span></div>`).join('')||'<p>記録はありません。</p>'}`:students.map(s=>`<div class="entry row"><b>${esc(s.grade)}　${esc(s.name)}</b><button data-study="${s.id}">学習記録</button></div>`).join('')}`);if(!s){document.querySelectorAll('[data-study]').forEach(b=>b.onclick=()=>{activeStudent=b.dataset.study;render()});return}let subject='国';document.querySelectorAll('[data-subject]').forEach(b=>b.onclick=()=>{subject=b.dataset.subject;document.querySelectorAll('[data-subject]').forEach(x=>x.classList.toggle('active',x===b));$('otherSubject').classList.toggle('hidden',subject!=='その他')});$('pages').oninput=e=>$('pageno').textContent=e.target.value;$('back').onclick=()=>{activeStudent=null;render()};$('studyForm').onsubmit=async e=>{e.preventDefault();const subj=subject==='その他'?$('otherSubject').value.trim():subject;if(!subj){alert('その他の内容を入力してください');return}try{const {error}=await db.from('manabi_study').insert({student_id:s.id,subject:subj,pages:Number($('pages').value)});if(error)throw error;await refresh()}catch(e){err(e)}}}
 let chatId=null;function contact(){const m=messages.find(x=>x.id===chatId);layout(`<h2>連絡管理</h2><p class="tiny">保護者からの連絡を確認し、同じ画面で返信できます。</p>${m?`<button id="closeChat" class="secondary">一覧に戻る</button><h3 style="margin-top:18px">${esc(students.find(s=>s.id===m.student_id)?.name||'生徒')} ／ ${esc(m.kind)} の連絡</h3><div class="chat" id="chat">${messages.filter(x=>x.student_id===m.student_id&&x.guardian_id===m.guardian_id&&x.kind===m.kind).slice().reverse().map(x=>`<div class="bubble ${x.sender==='先生'?'mine':''}">${esc(x.body)}<small>${esc(x.sender)} · ${esc(x.kind)} · ${time(x.created_at)}</small></div>`).join('')}</div><form id="reply"><label>返信内容（${m.kind==='相談'?'400':'150'}文字以内）</label><textarea maxlength="${m.kind==='相談'?'400':'150'}" id="replyText" required></textarea><button>返信する</button></form>`:messages.filter(x=>x.sender==='保護者').map(x=>`<div class="entry"><div class="row"><b>${esc(students.find(s=>s.id===x.student_id)?.name||'生徒')} ／ ${esc(x.kind)}</b><small>${time(x.created_at)}</small></div><div class="message-body">${esc(x.body)}</div><div class="row"><span class="tiny">${x.read_at?'確認済み':'未確認'}</span><button data-chat="${x.id}">会話・返信</button></div></div>`).join('')||'<p>まだ連絡はありません。</p>'}`);if(m){$('closeChat').onclick=()=>{chatId=null;render()};$('reply').onsubmit=async e=>{e.preventDefault();try{const {error}=await db.from('manabi_messages').insert({student_id:m.student_id,guardian_id:m.guardian_id,sender:'先生',kind:m.kind,body:$('replyText').value.trim()});if(error)throw error;await refresh()}catch(e){err(e)}}}else document.querySelectorAll('[data-chat]').forEach(b=>b.onclick=async()=>{chatId=b.dataset.chat;const x=messages.find(x=>x.id===chatId);if(!x.read_at){const {error}=await db.from('manabi_messages').update({read_at:new Date().toISOString()}).eq('id',x.id);if(error)err(error)}await refresh()})}
 function approve(){layout(`<h2>保護者の登録申請</h2><p class="tiny">保護者本人かを塾で確認したうえで承認してください。名前の一致だけでは承認しないでね。</p>${requests.filter(r=>r.state==='申請中').map(r=>`<div class="entry"><b>保護者：${esc(r.guardian_name)}</b><p>申請したお子さま：${esc(r.child_name)}　${esc(r.grade)}</p><div class="inline"><select data-sel="${r.id}" class="w200"><option value="">生徒を選ぶ</option>${students.map(s=>`<option value="${s.id}">${esc(s.grade)} ${esc(s.name)}</option>`).join('')}</select><button data-approve="${r.id}">承認する</button><button class="neutral" data-reject="${r.id}">却下</button></div></div>`).join('')||'<p>承認待ちの申請はありません。</p>'}<h3 style="margin-top:24px">承認済み</h3>${links.map(l=>`<div class="entry row"><span>${esc(students.find(s=>s.id===l.student_id)?.name||'削除済み')}（保護者ID末尾：${esc(l.guardian_id.slice(-6))}）</span><button class="danger" data-unlink="${l.student_id}|${l.guardian_id}">紐づけ解除</button></div>`).join('')||'<p class="tiny">まだありません</p>'}`);document.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{const req=requests.find(r=>r.id===b.dataset.approve),sid=document.querySelector(`[data-sel="${req.id}"]`).value,s=students.find(s=>s.id===sid);if(!s){alert('紐づける生徒を選んでください');return}if(!confirm(`保護者「${req.guardian_name}」が「${s.name}」の情報を見ることを許可しますか？ 本人確認済みの場合のみ続けてください。`))return;try{const {error}=await db.from('manabi_links').upsert({guardian_id:req.guardian_id,student_id:s.id});if(error)throw error;const r=await db.from('manabi_requests').update({state:'承認',decided_at:new Date().toISOString()}).eq('id',req.id);if(r.error)throw r.error;await refresh()}catch(e){err(e)}});document.querySelectorAll('[data-reject]').forEach(b=>b.onclick=async()=>{if(!confirm('申請を却下しますか？'))return;try{const {error}=await db.from('manabi_requests').update({state:'却下',decided_at:new Date().toISOString()}).eq('id',b.dataset.reject);if(error)throw error;await refresh()}catch(e){err(e)}});document.querySelectorAll('[data-unlink]').forEach(b=>b.onclick=async()=>{if(!confirm('保護者の閲覧権限を解除しますか？'))return;const [sid,gid]=b.dataset.unlink.split('|');try{const {error}=await db.from('manabi_links').delete().eq('student_id',sid).eq('guardian_id',gid);if(error)throw error;await refresh()}catch(e){err(e)}})}
