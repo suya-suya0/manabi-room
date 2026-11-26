@@ -104,6 +104,29 @@ body:not(.dark) .side .menu button:focus-visible{outline:3px solid #537d60;outli
 .manabi-pw-panel .manabi-pw-fields label{margin-top:8px}
 .manabi-pw-panel button{margin-top:12px}
 body.dark .manabi-pw-panel{border-color:#57515b}
+
+/* v16 生徒詳細：学校の進度・学習記録を一画面で確認 */
+.manabi-detail-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.manabi-detail-actions{display:flex;gap:9px;flex-wrap:wrap}
+.manabi-detail-profile{border-radius:18px;padding:19px;background:#e1efcd;color:#31563b;margin-bottom:16px}
+.manabi-detail-profile h2{margin:5px 0 8px}
+.manabi-detail-profile .tiny{color:#48654d}
+.manabi-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.manabi-detail-panel{border:1px solid #e8e5e2;border-radius:17px;padding:17px;min-width:0}
+.manabi-detail-panel h3{margin:0 0 12px}
+.manabi-progress-item{padding:11px 0;border-bottom:1px solid #e7e7e0}
+.manabi-progress-item:last-child{border-bottom:none}
+.manabi-progress-item p{margin:7px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
+.manabi-detail-tag{display:inline-block;padding:4px 10px;border-radius:30px;background:#f5dce7;color:#644353;font-size:13px;font-weight:700}
+.manabi-detail-studyrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #e7e7e0}
+.manabi-detail-studyrow:last-child{border-bottom:none}
+.manabi-detail-studyrow .tiny{white-space:nowrap}
+body.dark .manabi-detail-profile{background:#354c3d;color:#f4fff5}
+body.dark .manabi-detail-profile .tiny{color:#d1dfd2}
+body.dark .manabi-detail-panel{border-color:#625763}
+body.dark .manabi-progress-item,body.dark .manabi-detail-studyrow{border-color:#625763}
+body.dark .manabi-detail-tag{background:#624858;color:#ffe7f3}
+@media(max-width:980px){.manabi-detail-grid{grid-template-columns:1fr}}
 </style></head><body><div class="wrap"><header class="top"><div><div class="brand">✿ まなび管理室</div><div class="sub">先生用・管理画面</div></div><button id="logout" class="neutral hidden">ログアウト</button></header><div id="message" class="flash" role="status">接続準備中…</div><main id="app"></main></div><script>
 // 初期化の失敗を「接続準備中…」のままにしないための診断表示
 (function(){
@@ -221,9 +244,9 @@ function manage(){
  try{savedGroups=JSON.parse(localStorage.getItem('manabi_grade_open_v14')||'{}')}catch(_){}
  const groups=grades.map(g=>{
   const members=registered.filter(s=>s.grade===g);
-  return `<details class="manabi-grade-group" ${savedGroups[g] ? 'open' : ''} data-grade-group="${g}"><summary><span>${g}</span><small>${members.length}人</small></summary><div class="manabi-grade-members">${members.map(s=>`<div class="entry row manabi-register-row" data-register-search="${esc([s.name,s.kana,s.grade].join(' ').normalize('NFKC').toLowerCase())}"><div class="manabi-register-name"><strong>${esc(s.name)}</strong><div class="tiny">${esc(s.kana||'ふりがな未登録')}</div></div><div class="inline"><button type="button" class="secondary" data-edit="${s.id}">編集</button><button type="button" class="danger" data-del="${s.id}">削除</button></div></div>`).join('')||'<p class="manabi-no-member">この学年はまだ登録がありません。</p>'}</div></details>`;
+  return `<details class="manabi-grade-group" ${savedGroups[g] ? 'open' : ''} data-grade-group="${g}"><summary><span>${g}</span><small>${members.length}人</small></summary><div class="manabi-grade-members">${members.map(s=>`<div class="entry row manabi-register-row" data-register-search="${esc([s.name,s.kana,s.grade].join(' ').normalize('NFKC').toLowerCase())}"><div class="manabi-register-name"><strong>${esc(s.name)}</strong><div class="tiny">${esc(s.kana||'ふりがな未登録')}</div></div><div class="inline"><button type="button" class="neutral" data-detail="${s.id}">詳細</button><button type="button" class="secondary" data-edit="${s.id}">編集</button><button type="button" class="danger" data-del="${s.id}">削除</button></div></div>`).join('')||'<p class="manabi-no-member">この学年はまだ登録がありません。</p>'}</div></details>`;
  }).join('');
- layout(`<h2>生徒管理</h2><p class="tiny">生徒を登録しても在室にはなりません。登塾したら「ホーム → ＋ 生徒追加」から選んでください。</p><form id="addStudent" class="stack"><div class="row"><div style="flex:2"><label>氏名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 花子"></div><div style="flex:2"><label>ふりがな</label><input name="kana" maxlength="100" placeholder="例：たなか はなこ"></div><div><label>学年</label><select name="grade">${gradeSelect()}</select></div></div><button type="submit">生徒として登録する</button></form><div class="divider"></div><div class="manabi-register-heading"><h3>登録済み生徒一覧 <small>（${students.length}人）</small></h3><div class="manabi-collapse-actions"><button type="button" class="secondary" id="manabi-open-all">すべて開く</button><button type="button" class="neutral" id="manabi-close-all">すべて閉じる</button></div><label for="manabi-student-search">名前・ふりがなで検索</label><input id="manabi-student-search" type="search" placeholder="名前・ふりがなを入力" autocomplete="off"></div><div class="manabi-grade-list">${groups}</div><p class="tiny">学年を押すと一覧を開閉できます。生徒の編集・削除はここから行います。</p>`);
+ layout(`<h2>生徒管理</h2><p class="tiny">生徒を登録しても在室にはなりません。登塾したら「ホーム → ＋ 生徒追加」から選んでください。</p><form id="addStudent" class="stack"><div class="row"><div style="flex:2"><label>氏名（姓・名）</label><input name="name" required maxlength="100" placeholder="例：田中 花子"></div><div style="flex:2"><label>ふりがな</label><input name="kana" maxlength="100" placeholder="例：たなか はなこ"></div><div><label>学年</label><select name="grade">${gradeSelect()}</select></div></div><button type="submit">生徒として登録する</button></form><div class="divider"></div><div class="manabi-register-heading"><h3>登録済み生徒一覧 <small>（${students.length}人）</small></h3><div class="manabi-collapse-actions"><button type="button" class="secondary" id="manabi-open-all">すべて開く</button><button type="button" class="neutral" id="manabi-close-all">すべて閉じる</button></div><label for="manabi-student-search">名前・ふりがなで検索</label><input id="manabi-student-search" type="search" placeholder="名前・ふりがなを入力" autocomplete="off"></div><div class="manabi-grade-list">${groups}</div><p class="tiny">学年を押すと一覧を開閉できます。生徒の詳細・編集・削除はここから行います。</p>`);
  $('addStudent').onsubmit=async e=>{
   e.preventDefault();const f=new FormData(e.currentTarget);
   const name=String(f.get('name')||'').trim(),kana=String(f.get('kana')||'').trim(),grade=String(f.get('grade')||'');
@@ -257,11 +280,45 @@ function manage(){
    if(!q){const saved=JSON.parse(localStorage.getItem('manabi_grade_open_v14')||'{}');group.open=!!saved[group.dataset.gradeGroup]}
   });
  };
+ document.querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>{activeStudent=b.dataset.detail;section='detail';render()});
  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openStudentEdit(b.dataset.edit));
  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{
   if(!confirm('この生徒と学習記録・承認済みの紐づけを削除しますか？'))return;
   try{const {error}=await db.from('manabi_students').delete().eq('id',b.dataset.del);if(error)throw error;await refresh()}catch(e){err(e)}
  });
+}
+function studentDetail(){
+ const s=students.find(x=>x.id===activeStudent);
+ if(!s){section='students';manage();return}
+ const records=study.filter(r=>r.student_id===s.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+ const totalPages=records.reduce((sum,r)=>sum+(Number(r.pages)||0),0);
+ const recent=records.slice(0,20);
+ const last=records.length?time(records[0].created_at):'—';
+ layout(`<div class="manabi-detail-head"><button id="detailBack" class="secondary" type="button">← 生徒一覧に戻る</button><div class="manabi-detail-actions"><button id="detailStudy" type="button">＋ 学習記録を入力</button><button id="detailEdit" class="neutral" type="button">生徒情報を編集</button></div></div><div class="manabi-detail-profile"><span class="tiny">生徒詳細</span><h2>${esc(s.grade)}　${esc(s.name)}</h2><div class="tiny">ふりがな：${esc(s.kana||'未登録')}　／　現在の記録状態：${esc(s.status||'未登録')}</div></div><div class="manabi-detail-grid"><section class="manabi-detail-panel"><h3>学校の進度</h3><p class="tiny">子ども用・保護者用「すばる」で入力された、各教科の最新内容です。</p><div id="manabi-detail-progress" aria-live="polite"><p class="tiny">読み込み中…</p></div><button type="button" class="secondary" id="detailReloadProgress">進度を再読み込み</button></section><section class="manabi-detail-panel"><h3>塾での学習記録</h3><div class="row" style="gap:16px;margin-bottom:12px;flex-wrap:wrap"><div><b>${records.length}</b>件の記録</div><div>累計 <b>${totalPages}</b>ページ</div></div><p class="tiny">最終記録：${esc(last)}　／　直近20件を表示</p>${recent.length?recent.map(r=>`<div class="manabi-detail-studyrow"><div><span class="manabi-detail-tag">${esc(r.subject||'その他')}</span>　<b>${Number(r.pages)||0}ページ</b></div><span class="tiny">${esc(time(r.created_at))}</span></div>`).join(''):'<p class="tiny">まだ学習記録はありません。</p>'}</section></div>`);
+ $('detailBack').onclick=()=>{activeStudent=null;section='students';render()};
+ $('detailStudy').onclick=()=>{section='study';render()};
+ $('detailEdit').onclick=()=>openStudentEdit(s.id);
+ $('detailReloadProgress').onclick=()=>loadStudentProgress(s.id);
+ loadStudentProgress(s.id);
+}
+async function loadStudentProgress(studentId){
+ const target=$('manabi-detail-progress');if(!target)return;
+ target.innerHTML='<p class="tiny">読み込み中…</p>';
+ try{
+  const {data,error}=await db.from('manabi_school_progress').select('student_id,subject,details,updated_at').eq('student_id',studentId).order('updated_at',{ascending:false}).limit(120);
+  if(error)throw error;
+  if(section!=='detail'||activeStudent!==studentId)return;
+  const destination=$('manabi-detail-progress');if(!destination)return;
+  const latest=new Map();for(const row of data||[]){if(!latest.has(row.subject))latest.set(row.subject,row)}
+  const subjects=['国語','数学','理科','社会','英語','その他',...Array.from(latest.keys()).filter(x=>!['国語','数学','理科','社会','英語','その他'].includes(x))];
+  destination.innerHTML=subjects.map(subject=>{
+   const row=latest.get(subject);
+   return `<div class="manabi-progress-item"><span class="manabi-detail-tag">${esc(subject)}</span>${row?`<p>${esc(row.details||'未入力')}</p><small class="tiny">更新：${esc(time(row.updated_at))}</small>`:'<p class="tiny">まだ入力されていません</p>'}</div>`;
+  }).join('');
+ }catch(ex){
+  const destination=$('manabi-detail-progress');if(!destination||section!=='detail'||activeStudent!==studentId)return;
+  destination.innerHTML=`<p class="flash error">学校の進度を読み込めませんでした：${esc(ex.message||String(ex))}</p><p class="tiny">Supabaseの閲覧権限を確認してください。</p>`;
+ }
 }
 function studyPage(){const s=students.find(x=>x.id===activeStudent);layout(`<h2>学習記録</h2>${s?`<div class="card"><h3>${esc(s.grade)} ${esc(s.name)}</h3><form id="studyForm"><label>科目</label><div class="tabbar">${['国','数','理','社','英','その他'].map(t=>`<button type="button" data-subject="${t}" class="${t==='国'?'active':''}">${t}</button>`).join('')}</div><input id="otherSubject" placeholder="その他の内容" class="hidden" maxlength="50"><label>取り組んだページ数：<b id="pageno">10</b>ページ</label><input id="pages" type="range" min="0" max="100" value="10"><div class="row"><button type="submit">決定して記録</button><button type="button" class="secondary" id="back">一覧に戻る</button></div></form></div><h3 style="margin-top:18px">記録履歴</h3>${study.filter(r=>r.student_id===s.id).map(r=>`<div class="entry">${esc(r.subject)}　${r.pages}ページ　<span class="tiny">${time(r.created_at)}</span></div>`).join('')||'<p>記録はありません。</p>'}`:students.map(s=>`<div class="entry row"><b>${esc(s.grade)}　${esc(s.name)}</b><button data-study="${s.id}">学習記録</button></div>`).join('')}`);if(!s){document.querySelectorAll('[data-study]').forEach(b=>b.onclick=()=>{activeStudent=b.dataset.study;render()});return}let subject='国';document.querySelectorAll('[data-subject]').forEach(b=>b.onclick=()=>{subject=b.dataset.subject;document.querySelectorAll('[data-subject]').forEach(x=>x.classList.toggle('active',x===b));$('otherSubject').classList.toggle('hidden',subject!=='その他')});$('pages').oninput=e=>$('pageno').textContent=e.target.value;$('back').onclick=()=>{activeStudent=null;render()};$('studyForm').onsubmit=async e=>{e.preventDefault();const subj=subject==='その他'?$('otherSubject').value.trim():subject;if(!subj){alert('その他の内容を入力してください');return}try{const {error}=await db.from('manabi_study').insert({student_id:s.id,subject:subj,pages:Number($('pages').value)});if(error)throw error;await refresh()}catch(e){err(e)}}}
 let chatId=null;function contact(){const m=messages.find(x=>x.id===chatId);layout(`<h2>連絡管理</h2><p class="tiny">保護者からの連絡を確認し、同じ画面で返信できます。</p>${m?`<button id="closeChat" class="secondary">一覧に戻る</button><h3 style="margin-top:18px">${esc(students.find(s=>s.id===m.student_id)?.name||'生徒')} ／ ${esc(m.kind)} の連絡</h3><div class="chat" id="chat">${messages.filter(x=>x.student_id===m.student_id&&x.guardian_id===m.guardian_id&&x.kind===m.kind).slice().reverse().map(x=>`<div class="bubble ${x.sender==='先生'?'mine':''}">${esc(x.body)}<small>${esc(x.sender)} · ${esc(x.kind)} · ${time(x.created_at)}</small></div>`).join('')}</div><form id="reply"><label>返信内容（${m.kind==='相談'?'400':'150'}文字以内）</label><textarea maxlength="${m.kind==='相談'?'400':'150'}" id="replyText" required></textarea><button>返信する</button></form>`:messages.filter(x=>x.sender==='保護者').map(x=>`<div class="entry"><div class="row"><b>${esc(students.find(s=>s.id===x.student_id)?.name||'生徒')} ／ ${esc(x.kind)}</b><small>${time(x.created_at)}</small></div><div class="message-body">${esc(x.body)}</div><div class="row"><span class="tiny">${x.read_at?'確認済み':'未確認'}</span><button data-chat="${x.id}">会話・返信</button></div></div>`).join('')||'<p>まだ連絡はありません。</p>'}`);if(m){$('closeChat').onclick=()=>{chatId=null;render()};$('reply').onsubmit=async e=>{e.preventDefault();try{const {error}=await db.from('manabi_messages').insert({student_id:m.student_id,guardian_id:m.guardian_id,sender:'先生',kind:m.kind,body:$('replyText').value.trim()});if(error)throw error;await refresh()}catch(e){err(e)}}}else document.querySelectorAll('[data-chat]').forEach(b=>b.onclick=async()=>{chatId=b.dataset.chat;const x=messages.find(x=>x.id===chatId);if(!x.read_at){const {error}=await db.from('manabi_messages').update({read_at:new Date().toISOString()}).eq('id',x.id);if(error)err(error)}await refresh()})}
@@ -310,7 +367,7 @@ function settingsPage(){
 }
 function childAccounts(){layout(`<h2>子ども用アカウントの承認</h2><p class="tiny">塾の生徒本人であることを必ず確認してから承認してください。氏名の一致だけで承認しないでください。</p>${childRequests.filter(r=>r.state==='申請中').map(r=>`<div class="entry"><b>${esc(r.child_name)}（${esc(r.grade)}）</b><div class="inline"><select data-child-pick="${r.id}"><option value="">紐づける生徒を選択</option>${students.map(s=>`<option value="${s.id}">${esc(s.grade)} ${esc(s.name)}</option>`).join('')}</select><button data-child-approve="${r.id}">承認</button><button class="neutral" data-child-reject="${r.id}">却下</button></div></div>`).join('')||'<p>承認待ちの申請はありません。</p>'}`);document.querySelectorAll('[data-child-approve]').forEach(b=>b.onclick=async()=>{const r=childRequests.find(x=>x.id===b.dataset.childApprove),sid=document.querySelector(`[data-child-pick="${r.id}"]`).value;if(!sid){alert('生徒を選んでください');return}if(!confirm('本人確認は済んでいますか？ この生徒の在室・学習情報を子ども用アカウントに公開します。'))return;try{let result=await db.from('manabi_child_links').insert({child_user_id:r.child_user_id,student_id:sid});if(result.error)throw result.error;result=await db.from('manabi_child_requests').update({state:'承認',decided_at:new Date().toISOString()}).eq('id',r.id);if(result.error)throw result.error;await refresh()}catch(e){err(e)}});document.querySelectorAll('[data-child-reject]').forEach(b=>b.onclick=async()=>{if(!confirm('申請を却下しますか？'))return;const {error}=await db.from('manabi_child_requests').update({state:'却下',decided_at:new Date().toISOString()}).eq('id',b.dataset.childReject);if(error)err(error);else refresh()})}
 function diaryPage(){layout(`<h2>先生のひとこと日記</h2><p>子ども用アプリに表示する、先生からのひとことです。</p><form id="diaryForm"><label>今日のひとこと（500文字以内）</label><textarea name="body" maxlength="500" required placeholder="今日の塾で感じたことや、みんなへのひとこと"></textarea><p><button type="submit">日記を投稿</button></p></form><h3>過去の投稿</h3>${diaryEntries.map(d=>`<div class="entry"><small>${time(d.created_at)}</small><p style="white-space:pre-wrap">${esc(d.body)}</p><button class="neutral" data-diary-delete="${d.id}">削除</button></div>`).join('')||'<p>まだ投稿はありません。</p>'}`);$('diaryForm').onsubmit=async e=>{e.preventDefault();const body=e.target.elements.namedItem('body').value.trim();if(!body)return;try{const {error}=await db.from('manabi_diary').insert({body});if(error)throw error;await refresh();flash('日記を投稿しました','ok')}catch(e){err(e)}};document.querySelectorAll('[data-diary-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('この日記を削除しますか？'))return;const {error}=await db.from('manabi_diary').delete().eq('id',b.dataset.diaryDelete);if(error)err(error);else refresh()})}
-function render(){({home,students:manage,study:studyPage,contact,requests:approve,childaccounts:childAccounts,diary:diaryPage,settings:settingsPage}[section]||home)()}
+function render(){({home,students:manage,detail:studentDetail,study:studyPage,contact,requests:approve,childaccounts:childAccounts,diary:diaryPage,settings:settingsPage}[section]||home)()}
 async function refresh(){try{await load();render();flash('最新の情報に更新しました','ok')}catch(e){err(e)}}
 authView(start).then(u=>{if(!u&&db)formAuth()}).catch(e=>{err(e);$('app').innerHTML='<div class="card"><h2>ログイン画面の読み込みに失敗しました</h2><p>上のエラーメッセージを確認してください。</p><button onclick="location.reload()">再読み込み</button></div>'});setInterval(()=>{if(!document.hidden&&$('logout')&&!$('logout').classList.contains('hidden'))refresh()},60000);
 } catch (e) {
